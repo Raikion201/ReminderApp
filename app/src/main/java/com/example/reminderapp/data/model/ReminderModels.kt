@@ -1,0 +1,31 @@
+package com.example.reminderapp.data.model
+
+import java.util.UUID
+
+data class Reminder(
+    val id: String = UUID.randomUUID().toString(),
+    var title: String,
+    var notes: String? = null,
+    var dueDate: Long? = null, // Timestamp
+    var priority: Priority = Priority.NONE,
+    var isCompleted: Boolean = false,
+    val listId: String,
+
+    // Notification Customization
+    var isSoundEnabled: Boolean = true,
+    var notificationSoundUri: String? = null, // URI to custom sound
+    var isVibrateEnabled: Boolean = true,
+    var advanceNotificationMinutes: Int = 0, // 0 for at the time, 5, 10, 30 etc.
+    var repeatCount: Int = 0, // How many times to repeat if not viewed
+    var repeatIntervalMinutes: Int = 5 // Interval for repeats
+)
+
+data class ReminderList(
+    val id: String = UUID.randomUUID().toString(),
+    var name: String
+    // In a real app, you might add color, icon, etc.
+)
+
+enum class Priority {
+    NONE, LOW, MEDIUM, HIGH
+}

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.example.reminderapp.data.model.Priority
 import com.example.reminderapp.data.model.Reminder
+import com.example.reminderapp.data.model.SoundFetchState
 import com.example.reminderapp.data.repository.ReminderRepository // For fetching reminder details if needed
 
 class ReminderAlarmReceiver : BroadcastReceiver() {
@@ -18,7 +19,13 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         val priorityOrdinal = intent.getIntExtra("REMINDER_PRIORITY_ORDINAL", Priority.NONE.ordinal)
         val priority = Priority.values().getOrElse(priorityOrdinal) { Priority.NONE }
         val soundEnabled = intent.getBooleanExtra("REMINDER_SOUND_ENABLED", true)
-        val soundUri = intent.getStringExtra("REMINDER_SOUND_URI")
+        // val soundUri = intent.getStringExtra("REMINDER_SOUND_URI") // Old field
+        val remoteSoundUrl = intent.getStringExtra("REMINDER_REMOTE_SOUND_URL")
+        val localSoundUri = intent.getStringExtra("REMINDER_LOCAL_SOUND_URI")
+        val soundFetchStateOrdinal = intent.getIntExtra("REMINDER_SOUND_FETCH_STATE_ORDINAL", SoundFetchState.IDLE.ordinal)
+        val soundFetchState = SoundFetchState.values().getOrElse(soundFetchStateOrdinal) { SoundFetchState.IDLE }
+        val soundFetchProgressExtra = intent.getIntExtra("REMINDER_SOUND_FETCH_PROGRESS", -1)
+        val soundFetchProgress = if (soundFetchProgressExtra == -1) null else soundFetchProgressExtra
         val vibrateEnabled = intent.getBooleanExtra("REMINDER_VIBRATE_ENABLED", true)
         val repeatCount = intent.getIntExtra("REMINDER_REPEAT_COUNT", 0)
         val repeatInterval = intent.getIntExtra("REMINDER_REPEAT_INTERVAL", 5)
@@ -37,7 +44,11 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 listId = listId, // listId is needed for Reminder constructor
                 priority = priority,
                 isSoundEnabled = soundEnabled,
-                notificationSoundUri = soundUri,
+                // notificationSoundUri = soundUri, // Old field
+                remoteSoundUrl = remoteSoundUrl,
+                localSoundUri = localSoundUri,
+                soundFetchState = soundFetchState,
+                soundFetchProgress = soundFetchProgress,
                 isVibrateEnabled = vibrateEnabled,
                 repeatCount = repeatCount, // Original repeat count
                 repeatIntervalMinutes = repeatInterval

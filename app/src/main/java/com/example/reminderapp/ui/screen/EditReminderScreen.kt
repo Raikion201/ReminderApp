@@ -21,6 +21,9 @@ import com.example.reminderapp.ui.viewmodel.ReminderViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.example.reminderapp.data.model.SoundFetchState
+import androidx.compose.material3.CircularProgressIndicator
+import com.example.reminderapp.data.repository.ReminderRepository // Import ReminderRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +49,8 @@ fun EditReminderScreen(
 
     // Notification settings states
     var soundEnabled by rememberSaveable { mutableStateOf(existingReminder?.isSoundEnabled ?: true) }
-    var customSoundUri by rememberSaveable { mutableStateOf(existingReminder?.notificationSoundUri ?: "") } // Placeholder for URI
+    // var customSoundUri by rememberSaveable { mutableStateOf(existingReminder?.notificationSoundUri ?: "") } // Old field
+    var remoteSoundUrlInput by rememberSaveable { mutableStateOf(existingReminder?.remoteSoundUrl ?: "") }
     var vibrateEnabled by rememberSaveable { mutableStateOf(existingReminder?.isVibrateEnabled ?: true) }
     var selectedAdvanceMinutes by rememberSaveable { mutableStateOf(existingReminder?.advanceNotificationMinutes ?: 0) }
     var repeatCount by rememberSaveable { mutableStateOf(existingReminder?.repeatCount?.toString() ?: "0") }
@@ -109,6 +113,27 @@ fun EditReminderScreen(
     }
 
 
+    // Observe all reminders from the repository to get live updates for the current one.
+    val allRemindersFromRepository by ReminderRepository.reminders.collectAsState()
+
+    // Find the live instance of the reminder being edited from the repository's list.
+    // This will reflect updates made by operations like fetchCustomSound.
+    val liveReminderInstance = remember(existingReminder?.id, allRemindersFromRepository) {
+        if (isEditing && existingReminder?.id != null) {
+            allRemindersFromRepository.find { it.id == existingReminder.id }
+        } else {
+            null // Not editing or no existing reminder, so no live instance from repo yet.
+        }
+    }
+
+    // Determine the sound fetch status and local URI to display.
+    // Prioritize the live instance if available, otherwise use the initial existingReminder state,
+    // or defaults if it's a new reminder.
+    val soundFetchStatus = liveReminderInstance?.soundFetchState ?: existingReminder?.soundFetchState ?: SoundFetchState.IDLE
+    val actualLocalSoundUri = liveReminderInstance?.localSoundUri ?: existingReminder?.localSoundUri
+    val soundDownloadProgress = liveReminderInstance?.soundFetchProgress // Get progress
+
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,6 +151,17 @@ fun EditReminderScreen(
                             val currentRepeatInterval = repeatInterval.toIntOrNull() ?: 5
 
                             if (isEditing && existingReminder != null) {
+                                // Preserve existing localSoundUri and fetchState unless remoteSoundUrlInput changes them
+                                val finalRemoteSoundUrl = remoteSoundUrlInput.ifBlank { null }
+                                var soundStateToSave = existingReminder.soundFetchState
+                                var localUriToSave = existingReminder.localSoundUri
+
+                                if (existingReminder.remoteSoundUrl != finalRemoteSoundUrl) {
+                                    soundStateToSave = SoundFetchState.IDLE
+                                    localUriToSave = null
+                                }
+
+
                                 viewModel.updateReminder(
                                     existingReminder.copy(
                                         title = title,
@@ -133,7 +169,9 @@ fun EditReminderScreen(
                                         dueDate = finalDueDate,
                                         priority = selectedPriority,
                                         isSoundEnabled = soundEnabled,
-                                        notificationSoundUri = customSoundUri.ifBlank { null },
+                                        remoteSoundUrl = finalRemoteSoundUrl,
+                                        localSoundUri = localUriToSave, // Keep local if remote URL hasn't changed
+                                        soundFetchState = soundStateToSave, // Keep state if remote URL hasn't changed
                                         isVibrateEnabled = vibrateEnabled,
                                         advanceNotificationMinutes = selectedAdvanceMinutes,
                                         repeatCount = currentRepeatCount,
@@ -148,7 +186,7 @@ fun EditReminderScreen(
                                     dueDate = finalDueDate,
                                     priority = selectedPriority,
                                     isSoundEnabled = soundEnabled,
-                                    notificationSoundUri = customSoundUri.ifBlank { null },
+                                    remoteSoundUrl = remoteSoundUrlInput.ifBlank { null },
                                     isVibrateEnabled = vibrateEnabled,
                                     advanceNotificationMinutes = selectedAdvanceMinutes,
                                     repeatCount = currentRepeatCount,
@@ -232,17 +270,68 @@ fun EditReminderScreen(
                 Switch(checked = soundEnabled, onCheckedChange = { soundEnabled = it })
             }
 
-            // Custom Sound (Placeholder UI)
+            // Custom Sound Input and Status
             OutlinedTextField(
-                value = customSoundUri,
-                onValueChange = { customSoundUri = it },
-                label = { Text("Custom Sound URI (Optional)") },
+                value = remoteSoundUrlInput,
+                onValueChange = { remoteSoundUrlInput = it },
+                label = { Text("Custom Sound URL (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("e.g., content://media/internal/audio/media/123") }
+                placeholder = { Text("https://example.com/sound.mp3") },
+                enabled = soundEnabled
             )
-            Button(onClick = { /* TODO: Implement Sound Picker */ }, modifier = Modifier.fillMaxWidth()) {
-                Text("Select Custom Sound")
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Button(
+                    onClick = {
+                        if (soundEnabled && remoteSoundUrlInput.isNotBlank()) {
+                            // Use existingReminder.id for the fetch operation.
+                            // If it's a new reminder, existingReminder.id will be null,
+                            // and fetchCustomSound won't be called, which is correct
+                            // as it needs an ID to update the reminder in the repository.
+                            existingReminder?.id?.let { remId ->
+                                viewModel.fetchCustomSound(remId, remoteSoundUrlInput)
+                            }
+                        }
+                    },
+                    enabled = soundEnabled && remoteSoundUrlInput.isNotBlank() && soundFetchStatus != SoundFetchState.FETCHING && isEditing // Fetch button enabled only for existing reminders
+                ) {
+                    Text(
+                        when (soundFetchStatus) {
+                            SoundFetchState.FETCHING -> "Fetching..."
+                            SoundFetchState.FETCHED -> "Re-fetch" // Or "Update Sound"
+                            SoundFetchState.ERROR -> "Retry Fetch"
+                            else -> "Use sound from Internet" // Changed from "Fetch Sound"
+                        }
+                    )
+                }
+                when (soundFetchStatus) {
+                    SoundFetchState.FETCHING -> {
+                        if (soundDownloadProgress != null) {
+                            // Determinate progress
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(
+                                    progress = { soundDownloadProgress / 100f },
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text("${soundDownloadProgress}%", style = MaterialTheme.typography.bodySmall)
+                            }
+                        } else {
+                            // Indeterminate progress (e.g., if contentLength was not available)
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    SoundFetchState.FETCHED -> Text("✅ Fetched", color = MaterialTheme.colorScheme.primary)
+                    SoundFetchState.ERROR -> Text("⚠️ Error", color = MaterialTheme.colorScheme.error)
+                    SoundFetchState.IDLE -> if (remoteSoundUrlInput.isNotBlank() && soundEnabled && isEditing) Text("Pending fetch") else Text("") // Show pending only if editing
+                }
+            }
+            if (soundFetchStatus == SoundFetchState.FETCHED && actualLocalSoundUri != null) {
+                Text("Using: ${actualLocalSoundUri.takeLast(20)}", style = MaterialTheme.typography.bodySmall)
             }
 
 

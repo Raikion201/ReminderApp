@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.example.reminderapp.data.model.Reminder
+import com.example.reminderapp.data.model.SoundFetchState
 
 class AlarmScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -25,7 +26,11 @@ class AlarmScheduler(private val context: Context) {
             putExtra("REMINDER_LIST_ID", reminder.listId)
             putExtra("REMINDER_PRIORITY_ORDINAL", reminder.priority.ordinal)
             putExtra("REMINDER_SOUND_ENABLED", reminder.isSoundEnabled)
-            putExtra("REMINDER_SOUND_URI", reminder.notificationSoundUri)
+            // putExtra("REMINDER_SOUND_URI", reminder.notificationSoundUri) // Old field
+            putExtra("REMINDER_REMOTE_SOUND_URL", reminder.remoteSoundUrl)
+            putExtra("REMINDER_LOCAL_SOUND_URI", reminder.localSoundUri)
+            putExtra("REMINDER_SOUND_FETCH_STATE_ORDINAL", reminder.soundFetchState.ordinal)
+            putExtra("REMINDER_SOUND_FETCH_PROGRESS", reminder.soundFetchProgress ?: -1) // Pass progress, -1 if null
             putExtra("REMINDER_VIBRATE_ENABLED", reminder.isVibrateEnabled)
             putExtra("REMINDER_REPEAT_COUNT", reminder.repeatCount)
             putExtra("REMINDER_REPEAT_INTERVAL", reminder.repeatIntervalMinutes)
@@ -79,7 +84,11 @@ class AlarmScheduler(private val context: Context) {
             putExtra("REMINDER_LIST_ID", reminder.listId)
             putExtra("REMINDER_PRIORITY_ORDINAL", reminder.priority.ordinal)
             putExtra("REMINDER_SOUND_ENABLED", reminder.isSoundEnabled)
-            putExtra("REMINDER_SOUND_URI", reminder.notificationSoundUri)
+            // putExtra("REMINDER_SOUND_URI", reminder.notificationSoundUri) // Old field
+            putExtra("REMINDER_REMOTE_SOUND_URL", reminder.remoteSoundUrl)
+            putExtra("REMINDER_LOCAL_SOUND_URI", reminder.localSoundUri)
+            putExtra("REMINDER_SOUND_FETCH_STATE_ORDINAL", reminder.soundFetchState.ordinal)
+            putExtra("REMINDER_SOUND_FETCH_PROGRESS", reminder.soundFetchProgress ?: -1) // Pass progress, -1 if null
             putExtra("REMINDER_VIBRATE_ENABLED", reminder.isVibrateEnabled)
             putExtra("REMINDER_REPEAT_COUNT", reminder.repeatCount) // Original repeat count
             putExtra("REMINDER_REPEAT_INTERVAL", reminder.repeatIntervalMinutes)

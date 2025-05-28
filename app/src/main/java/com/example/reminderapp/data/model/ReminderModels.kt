@@ -2,6 +2,13 @@ package com.example.reminderapp.data.model
 
 import java.util.UUID
 
+enum class SoundFetchState {
+    IDLE, // No attempt to fetch or URL not provided
+    FETCHING,
+    FETCHED,
+    ERROR
+}
+
 data class Reminder(
     val id: String = UUID.randomUUID().toString(),
     var title: String,
@@ -13,7 +20,10 @@ data class Reminder(
 
     // Notification Customization
     var isSoundEnabled: Boolean = true,
-    var notificationSoundUri: String? = null, // URI to custom sound
+    var remoteSoundUrl: String? = null, // URL input by user
+    var localSoundUri: String? = null, // URI of fetched/cached sound
+    var soundFetchState: SoundFetchState = SoundFetchState.IDLE,
+    var soundFetchProgress: Int? = null, // Download progress (0-100), null if not fetching or not applicable
     var isVibrateEnabled: Boolean = true,
     var advanceNotificationMinutes: Int = 0, // 0 for at the time, 5, 10, 30 etc.
     var repeatCount: Int = 0, // How many times to repeat if not viewed

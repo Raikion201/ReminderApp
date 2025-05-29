@@ -27,7 +27,8 @@ data class Reminder(
     var isVibrateEnabled: Boolean = true,
     var advanceNotificationMinutes: Int = 0, // 0 for at the time, 5, 10, 30 etc.
     var repeatCount: Int = 0, // How many times to repeat if not viewed
-    var repeatIntervalMinutes: Int = 5 // Interval for repeats
+    var repeatIntervalMinutes: Int = 5, // Interval for repeats
+    var notificationsEnabled: Boolean = true // New field to enable/disable notifications
 )
 
 data class ReminderList(

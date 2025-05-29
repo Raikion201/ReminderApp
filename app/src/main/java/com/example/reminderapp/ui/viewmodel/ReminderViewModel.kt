@@ -73,6 +73,7 @@ class ReminderViewModel(
         dueDate: Long? = null,
         priority: Priority = Priority.NONE,
         isSoundEnabled: Boolean = true,
+        notificationsEnabled: Boolean = true, // New param
         remoteSoundUrl: String? = null, // new field
         isVibrateEnabled: Boolean = true,
         advanceNotificationMinutes: Int = 0,
@@ -87,6 +88,7 @@ class ReminderViewModel(
                 dueDate = dueDate,
                 priority = priority,
                 isSoundEnabled = isSoundEnabled,
+                notificationsEnabled = notificationsEnabled, // Pass new field
                 remoteSoundUrl = remoteSoundUrl,
                 localSoundUri = null, // Initially null
                 soundFetchState = if (remoteSoundUrl != null && isSoundEnabled) SoundFetchState.IDLE else SoundFetchState.IDLE, // Or FETCHING if auto-fetch
@@ -96,10 +98,10 @@ class ReminderViewModel(
                 repeatIntervalMinutes = repeatIntervalMinutes
             )
             ReminderRepository.addReminder(newReminder)
-            // Schedule notification
-            newReminder.dueDate?.let {
-                val actualTriggerTime = it - (newReminder.advanceNotificationMinutes * 60 * 1000L)
-                if (actualTriggerTime > System.currentTimeMillis()) {
+            // Schedule notification only if enabled
+            if (notificationsEnabled) {
+                newReminder.dueDate?.let {
+                    val actualTriggerTime = it - (newReminder.advanceNotificationMinutes * 60 * 1000L)
                     alarmScheduler.schedule(newReminder.copy(dueDate = actualTriggerTime))
                 }
             }
@@ -111,29 +113,15 @@ class ReminderViewModel(
     }
 
     fun updateReminder(reminder: Reminder) {
-        // If remoteSoundUrl changed, reset localSoundUri and state
-        val existingReminder = ReminderRepository.reminders.value.find { it.id == reminder.id }
-        var updatedReminder = reminder
-        if (existingReminder?.remoteSoundUrl != reminder.remoteSoundUrl) {
-            updatedReminder = reminder.copy(localSoundUri = null, soundFetchState = SoundFetchState.IDLE)
-        }
-
-        ReminderRepository.updateReminder(updatedReminder)
-        // Re-schedule or cancel notification
-        val actualTriggerTime = updatedReminder.dueDate?.let {
-            it - (updatedReminder.advanceNotificationMinutes * 60 * 1000L)
-        }
-
-        if (actualTriggerTime != null && actualTriggerTime > System.currentTimeMillis() && !updatedReminder.isCompleted) {
-            alarmScheduler.schedule(updatedReminder.copy(dueDate = actualTriggerTime))
+        ReminderRepository.updateReminder(reminder)
+        // Cancel or schedule notification based on notificationsEnabled
+        if (reminder.notificationsEnabled) {
+            reminder.dueDate?.let {
+                val actualTriggerTime = it - (reminder.advanceNotificationMinutes * 60 * 1000L)
+                alarmScheduler.schedule(reminder.copy(dueDate = actualTriggerTime))
+            }
         } else {
-            alarmScheduler.cancel(updatedReminder)
-        }
-
-        // Optionally, auto-fetch sound if URL is provided and not yet fetched/error
-        if (updatedReminder.isSoundEnabled && updatedReminder.remoteSoundUrl != null &&
-            (updatedReminder.soundFetchState == SoundFetchState.IDLE || updatedReminder.soundFetchState == SoundFetchState.ERROR)) {
-            fetchCustomSound(updatedReminder.id, updatedReminder.remoteSoundUrl!!)
+            alarmScheduler.cancel(reminder)
         }
     }
 

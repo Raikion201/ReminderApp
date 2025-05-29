@@ -49,7 +49,8 @@ class ReminderAlarmReceiver : BroadcastReceiver() {    override fun onReceive(co
                 soundFetchProgress = soundFetchProgress,
                 isVibrateEnabled = vibrateEnabled,
                 repeatCount = repeatCount, // Original repeat count
-                repeatIntervalMinutes = repeatInterval
+                repeatIntervalMinutes = repeatInterval,
+                notificationsEnabled = true // Always true for triggered alarms
                 // dueDate is not strictly needed here for showing notification,
                 // but NotificationHelper might re-schedule based on original reminder.dueDate
                 // For repeat logic, the current time is the trigger time.

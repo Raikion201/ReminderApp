@@ -124,11 +124,10 @@ fun EditReminderScreen(
     }
 
 
-    // Observe all reminders from the repository to get live updates for the current one.
-    val allRemindersFromRepository by ReminderRepository.reminders.collectAsState()
+    // Get all reminders for this list from the ViewModel
+    val allRemindersFromRepository by viewModel.getRemindersForList(listId).collectAsState(initial = emptyList())
 
     // Find the live instance of the reminder being edited from the repository's list.
-    // This will reflect updates made by operations like fetchCustomSound.
     val liveReminderInstance = remember(existingReminder?.id, allRemindersFromRepository) {
         if (isEditing && existingReminder?.id != null) {
             allRemindersFromRepository.find { it.id == existingReminder.id }
@@ -136,13 +135,10 @@ fun EditReminderScreen(
             null // Not editing or no existing reminder, so no live instance from repo yet.
         }
     }
-
     // Determine the sound fetch status and local URI to display.
-    // Prioritize the live instance if available, otherwise use the initial existingReminder state,
-    // or defaults if it's a new reminder.
     val soundFetchStatus = liveReminderInstance?.soundFetchState ?: existingReminder?.soundFetchState ?: SoundFetchState.IDLE
     val actualLocalSoundUri = liveReminderInstance?.localSoundUri ?: existingReminder?.localSoundUri
-    val soundDownloadProgress = liveReminderInstance?.soundFetchProgress // Get progress
+    val soundDownloadProgress = liveReminderInstance?.soundFetchProgress ?: existingReminder?.soundFetchProgress
 
 
     Scaffold(
@@ -191,20 +187,25 @@ fun EditReminderScreen(
                                     )
                                 )
                             } else {
-                                viewModel.addReminder(
+                                val newReminder = Reminder(
                                     title = title,
-                                    listId = listId,
                                     notes = notes.ifBlank { null },
                                     dueDate = finalDueDate,
                                     priority = selectedPriority,
+                                    isCompleted = false,
+                                    listId = listId,
                                     isSoundEnabled = soundEnabled,
-                                    notificationsEnabled = notificationsEnabled, // Pass new field
                                     remoteSoundUrl = remoteSoundUrlInput.ifBlank { null },
+                                    localSoundUri = null,
+                                    soundFetchState = SoundFetchState.IDLE,
+                                    soundFetchProgress = null,
                                     isVibrateEnabled = vibrateEnabled,
                                     advanceNotificationMinutes = selectedAdvanceMinutes,
                                     repeatCount = currentRepeatCount,
-                                    repeatIntervalMinutes = currentRepeatInterval
+                                    repeatIntervalMinutes = currentRepeatInterval,
+                                    notificationsEnabled = notificationsEnabled
                                 )
+                                viewModel.addReminder(newReminder)
                             }
                             navController.popBackStack()
                         }

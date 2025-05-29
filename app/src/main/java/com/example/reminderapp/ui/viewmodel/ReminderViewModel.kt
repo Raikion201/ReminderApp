@@ -40,9 +40,20 @@ class ReminderViewModel(
             .map { reminders -> reminders.filter { it.listId == listId } }
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     }
-    
-    fun getReminderList(listId: String): ReminderList? {
+      fun getReminderList(listId: String): ReminderList? {
         return ReminderRepository.getReminderList(listId)
+    }
+
+    // Get counts of completed and active reminders for a list
+    fun getReminderCountsForList(listId: String): StateFlow<Pair<Int, Int>> {
+        return ReminderRepository.reminders
+            .map { reminders ->
+                val listReminders = reminders.filter { it.listId == listId }
+                val completedCount = listReminders.count { it.isCompleted }
+                val activeCount = listReminders.size - completedCount
+                Pair(activeCount, completedCount)
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, Pair(0, 0))
     }
 
     fun addReminderList(name: String) {
@@ -249,8 +260,15 @@ class ReminderViewModel(
                 if (it > System.currentTimeMillis()) {
                     alarmScheduler.schedule(updatedReminder)
                 }
-            }
-        }
+            }        }
+    }
+
+    fun deleteReminder(reminder: Reminder) {
+        // Cancel any alarms for this reminder
+        alarmScheduler.cancel(reminder)
+        
+        // Delete from repository
+        ReminderRepository.deleteReminder(reminder.id)
     }
 
     fun getReminder(reminderId: String, listId: String): Reminder? {

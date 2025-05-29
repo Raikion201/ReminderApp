@@ -27,14 +27,14 @@ import com.example.reminderapp.ui.viewmodel.ReminderViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavController, viewModel: ReminderViewModel) {
-    val lists by viewModel.reminderLists.collectAsState()
+    val lists by viewModel.reminderLists.collectAsState(initial = emptyList())
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
                     Column {
-                        Text("Reminder App")
+                        Text("Promptly")
                         Text(
                             text = "${lists.size} list${if (lists.size != 1) "s" else ""}",
                             style = MaterialTheme.typography.labelSmall,
@@ -46,7 +46,7 @@ fun MainScreen(navController: NavController, viewModel: ReminderViewModel) {
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate(Routes.ADD_LIST_SCREEN) }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Reminder List")
+                Icon(Icons.Filled.Add, contentDescription = "Add List")
             }
         }
     ) { paddingValues ->
@@ -101,7 +101,7 @@ fun MainScreen(navController: NavController, viewModel: ReminderViewModel) {
 
 @Composable
 fun ReminderListRow(list: ReminderList, onClick: () -> Unit, viewModel: ReminderViewModel) {
-    val countsState by viewModel.getReminderCountsForList(list.id).collectAsState()
+    val countsState by viewModel.getReminderCountsForList(list.id).collectAsState(initial = 0 to 0)
     val activeCount = countsState.first
     val completedCount = countsState.second
     

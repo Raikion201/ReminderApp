@@ -9,6 +9,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.core.content.ContextCompat
@@ -47,13 +55,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ReminderAppTheme {
-                // Pass initial deep link data if available from notification
-                AppNavigation(
-                    reminderViewModel = reminderViewModel,
-                    // Example: how you might pass deep link info
-                    // startDestination = determineStartDestination(intent),
-                    // startDestinationArgs = extractArgs(intent)
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.bgv1),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().alpha(0.4f),
+                        contentScale = ContentScale.Crop
+                    )
+                    // App content overlays the background
+                    AppNavigation(
+                        reminderViewModel = reminderViewModel,
+                        // Example: how you might pass deep link info
+                        // startDestination = determineStartDestination(intent),
+                        // startDestinationArgs = extractArgs(intent)
+                    )
+                }
             }
         }
         handleIntent(intent) // Handle intent if app was opened from notification

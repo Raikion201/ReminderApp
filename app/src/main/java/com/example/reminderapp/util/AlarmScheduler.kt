@@ -12,6 +12,12 @@ class AlarmScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     fun schedule(reminder: Reminder) {
+        // Only schedule if notifications are enabled
+        if (!reminder.notificationsEnabled) {
+            cancel(reminder)
+            return
+        }
+
         // The reminder.dueDate should already be the adjusted trigger time from ViewModel
         if (reminder.dueDate == null || reminder.dueDate!! <= System.currentTimeMillis() || reminder.isCompleted) {
             cancel(reminder) // Cancel if it's past, null, or completed
@@ -73,6 +79,7 @@ class AlarmScheduler(private val context: Context) {
 
     // New method for scheduling repeats, distinct request code
     fun scheduleRepeat(reminder: Reminder, remainingRepeats: Int) {
+        if (!reminder.notificationsEnabled) return // Only schedule if enabled
         if (reminder.dueDate == null || reminder.dueDate!! <= System.currentTimeMillis() || reminder.isCompleted || remainingRepeats < 0) {
             return
         }

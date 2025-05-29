@@ -8,22 +8,20 @@ import com.example.reminderapp.data.model.Reminder
 import com.example.reminderapp.data.model.SoundFetchState
 import com.example.reminderapp.data.repository.ReminderRepository // For fetching reminder details if needed
 
-class ReminderAlarmReceiver : BroadcastReceiver() {
-
-    override fun onReceive(context: Context, intent: Intent) {
+class ReminderAlarmReceiver : BroadcastReceiver() {    override fun onReceive(context: Context, intent: Intent) {
         val reminderId = intent.getStringExtra("REMINDER_ID")
         val reminderTitle = intent.getStringExtra("REMINDER_TITLE") ?: "Reminder"
         val reminderNotes = intent.getStringExtra("REMINDER_NOTES")
         val listId = intent.getStringExtra("REMINDER_LIST_ID") ?: "" // Required for creating a dummy reminder if needed
-
-        val priorityOrdinal = intent.getIntExtra("REMINDER_PRIORITY_ORDINAL", Priority.NONE.ordinal)
-        val priority = Priority.values().getOrElse(priorityOrdinal) { Priority.NONE }
+          val priorityOrdinal = intent.getIntExtra("REMINDER_PRIORITY_ORDINAL", Priority.NONE.ordinal)
+        val priority = Priority.entries.getOrElse(priorityOrdinal) { Priority.NONE }
         val soundEnabled = intent.getBooleanExtra("REMINDER_SOUND_ENABLED", true)
         // val soundUri = intent.getStringExtra("REMINDER_SOUND_URI") // Old field
         val remoteSoundUrl = intent.getStringExtra("REMINDER_REMOTE_SOUND_URL")
         val localSoundUri = intent.getStringExtra("REMINDER_LOCAL_SOUND_URI")
+        
         val soundFetchStateOrdinal = intent.getIntExtra("REMINDER_SOUND_FETCH_STATE_ORDINAL", SoundFetchState.IDLE.ordinal)
-        val soundFetchState = SoundFetchState.values().getOrElse(soundFetchStateOrdinal) { SoundFetchState.IDLE }
+        val soundFetchState = SoundFetchState.entries.getOrElse(soundFetchStateOrdinal) { SoundFetchState.IDLE }
         val soundFetchProgressExtra = intent.getIntExtra("REMINDER_SOUND_FETCH_PROGRESS", -1)
         val soundFetchProgress = if (soundFetchProgressExtra == -1) null else soundFetchProgressExtra
         val vibrateEnabled = intent.getBooleanExtra("REMINDER_VIBRATE_ENABLED", true)
@@ -51,7 +49,8 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 soundFetchProgress = soundFetchProgress,
                 isVibrateEnabled = vibrateEnabled,
                 repeatCount = repeatCount, // Original repeat count
-                repeatIntervalMinutes = repeatInterval
+                repeatIntervalMinutes = repeatInterval,
+                notificationsEnabled = true // Always true for triggered alarms
                 // dueDate is not strictly needed here for showing notification,
                 // but NotificationHelper might re-schedule based on original reminder.dueDate
                 // For repeat logic, the current time is the trigger time.

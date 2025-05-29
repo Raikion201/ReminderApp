@@ -7,7 +7,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -17,13 +20,20 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.reminderapp.data.model.Reminder
+import com.example.reminderapp.ui.components.AdvanceNotificationSelector
 import com.example.reminderapp.ui.viewmodel.ReminderViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import com.example.reminderapp.data.model.SoundFetchState
+import com.example.reminderapp.ui.components.DateTimeChip
+import com.example.reminderapp.ui.components.PrioritySelector
 import androidx.compose.material3.CircularProgressIndicator
 import com.example.reminderapp.data.repository.ReminderRepository // Import ReminderRepository
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +59,7 @@ fun EditReminderScreen(
 
     // Notification settings states
     var soundEnabled by rememberSaveable { mutableStateOf(existingReminder?.isSoundEnabled ?: true) }
+    var notificationsEnabled by rememberSaveable { mutableStateOf(existingReminder?.notificationsEnabled ?: true) } // New state
     // var customSoundUri by rememberSaveable { mutableStateOf(existingReminder?.notificationSoundUri ?: "") } // Old field
     var remoteSoundUrlInput by rememberSaveable { mutableStateOf(existingReminder?.remoteSoundUrl ?: "") }
     var vibrateEnabled by rememberSaveable { mutableStateOf(existingReminder?.isVibrateEnabled ?: true) }
@@ -113,11 +124,10 @@ fun EditReminderScreen(
     }
 
 
-    // Observe all reminders from the repository to get live updates for the current one.
-    val allRemindersFromRepository by ReminderRepository.reminders.collectAsState()
+    // Get all reminders for this list from the ViewModel
+    val allRemindersFromRepository by viewModel.getRemindersForList(listId).collectAsState(initial = emptyList())
 
     // Find the live instance of the reminder being edited from the repository's list.
-    // This will reflect updates made by operations like fetchCustomSound.
     val liveReminderInstance = remember(existingReminder?.id, allRemindersFromRepository) {
         if (isEditing && existingReminder?.id != null) {
             allRemindersFromRepository.find { it.id == existingReminder.id }
@@ -125,13 +135,10 @@ fun EditReminderScreen(
             null // Not editing or no existing reminder, so no live instance from repo yet.
         }
     }
-
     // Determine the sound fetch status and local URI to display.
-    // Prioritize the live instance if available, otherwise use the initial existingReminder state,
-    // or defaults if it's a new reminder.
     val soundFetchStatus = liveReminderInstance?.soundFetchState ?: existingReminder?.soundFetchState ?: SoundFetchState.IDLE
     val actualLocalSoundUri = liveReminderInstance?.localSoundUri ?: existingReminder?.localSoundUri
-    val soundDownloadProgress = liveReminderInstance?.soundFetchProgress // Get progress
+    val soundDownloadProgress = liveReminderInstance?.soundFetchProgress ?: existingReminder?.soundFetchProgress
 
 
     Scaffold(
@@ -169,6 +176,7 @@ fun EditReminderScreen(
                                         dueDate = finalDueDate,
                                         priority = selectedPriority,
                                         isSoundEnabled = soundEnabled,
+                                        notificationsEnabled = notificationsEnabled, // Pass new field
                                         remoteSoundUrl = finalRemoteSoundUrl,
                                         localSoundUri = localUriToSave, // Keep local if remote URL hasn't changed
                                         soundFetchState = soundStateToSave, // Keep state if remote URL hasn't changed
@@ -179,19 +187,25 @@ fun EditReminderScreen(
                                     )
                                 )
                             } else {
-                                viewModel.addReminder(
+                                val newReminder = Reminder(
                                     title = title,
-                                    listId = listId,
                                     notes = notes.ifBlank { null },
                                     dueDate = finalDueDate,
                                     priority = selectedPriority,
+                                    isCompleted = false,
+                                    listId = listId,
                                     isSoundEnabled = soundEnabled,
                                     remoteSoundUrl = remoteSoundUrlInput.ifBlank { null },
+                                    localSoundUri = null,
+                                    soundFetchState = SoundFetchState.IDLE,
+                                    soundFetchProgress = null,
                                     isVibrateEnabled = vibrateEnabled,
                                     advanceNotificationMinutes = selectedAdvanceMinutes,
                                     repeatCount = currentRepeatCount,
-                                    repeatIntervalMinutes = currentRepeatInterval
+                                    repeatIntervalMinutes = currentRepeatInterval,
+                                    notificationsEnabled = notificationsEnabled
                                 )
+                                viewModel.addReminder(newReminder)
                             }
                             navController.popBackStack()
                         }
@@ -225,236 +239,300 @@ fun EditReminderScreen(
                 modifier = Modifier.fillMaxWidth().height(120.dp),
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Due Date/Time Switch
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Set Due Date/Time", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                Switch(
-                    checked = dueDateEnabled,
-                    onCheckedChange = { dueDateEnabled = it }
-                )
-            }
-            // Date and Time Pickers
-            if (dueDateEnabled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(onClick = { showDatePickerDialog = true }) {
-                        Icon(Icons.Default.DateRange, contentDescription = "Pick Date")
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text(SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(reminderDateTimeCalendar.time))
+            Spacer(modifier = Modifier.height(8.dp))            // Due Date/Time Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {                    Row(verticalAlignment = Alignment.CenterVertically) {                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = "Due Date",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Due Date & Time", 
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Switch(
+                            checked = dueDateEnabled,
+                            onCheckedChange = { dueDateEnabled = it }
+                        )
                     }
-                    Button(onClick = { showTimePickerDialog = true }) {
-                        Text(SimpleDateFormat("hh:mm a", Locale.getDefault()).format(reminderDateTimeCalendar.time))
+                    
+                    if (dueDateEnabled) {
+                        // Date picker
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            DateTimeChip(
+                                text = SimpleDateFormat("EEE, MMM dd, yyyy", Locale.getDefault())
+                                    .format(reminderDateTimeCalendar.time),
+                                onClick = { showDatePickerDialog = true }
+                            )
+                            
+                            DateTimeChip(
+                                text = SimpleDateFormat("h:mm a", Locale.getDefault())
+                                    .format(reminderDateTimeCalendar.time),
+                                onClick = { showTimePickerDialog = true }
+                            )
+                        }
+                    } else {
+                        Text(
+                            "No due date set",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
-            Text("Notification Settings", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth())
-
-            // Priority Dropdown
-            PrioritySelector(
-                selectedPriority = selectedPriority,
-                onPrioritySelected = { selectedPriority = it }
-            )
-
-            // Sound Enabled Switch
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Enable Sound")
-                Spacer(Modifier.weight(1f))
-                Switch(checked = soundEnabled, onCheckedChange = { soundEnabled = it })
-            }
-
-            // Custom Sound Input and Status
-            OutlinedTextField(
-                value = remoteSoundUrlInput,
-                onValueChange = { remoteSoundUrlInput = it },
-                label = { Text("Custom Sound URL (Optional)") },
+            Spacer(modifier = Modifier.height(8.dp))            // Notification Settings Section
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("https://example.com/sound.mp3") },
-                enabled = soundEnabled
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notification Settings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Notification Settings", 
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    // Enhanced Enable Notifications Switch
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (notificationsEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                            contentColor = if (notificationsEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Enable Notifications",
+                                tint = if (notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Enable Notifications",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = notificationsEnabled,
+                                onCheckedChange = { notificationsEnabled = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                    uncheckedThumbColor = MaterialTheme.colorScheme.error,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    uncheckedTrackColor = MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                                )
+                            )
+                        }
+                    }
+                    // All notification settings below are grayed out if notifications are disabled
+                    val sectionAlpha = if (notificationsEnabled) 1f else 0.4f
+                    // Remove CompositionLocalProvider for alpha
+                    // Use Modifier.alpha(sectionAlpha) for all notification-related UI blocks
+                    // Remove 'enabled' param from AdvanceNotificationSelector
+                    Column(
+                        modifier = Modifier.alpha(sectionAlpha),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Priority selector
+                        PrioritySelector(
+                            selectedPriority = selectedPriority,
+                            onPrioritySelected = { selectedPriority = it }
+                        )
+                        Divider()
+                        // Sound Settings
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text("Enable Sound", style = MaterialTheme.typography.bodyMedium)
+                                Spacer(Modifier.weight(1f))
+                                Switch(checked = soundEnabled, onCheckedChange = { soundEnabled = it }, enabled = notificationsEnabled)
+                            }
+                            if (soundEnabled) {
+                                OutlinedTextField(
+                                    value = remoteSoundUrlInput,
+                                    onValueChange = { remoteSoundUrlInput = it },
+                                    label = { Text("Custom Sound URL") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    placeholder = { Text("https://example.com/sound.mp3") },
+                                    enabled = notificationsEnabled
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            if (soundEnabled && remoteSoundUrlInput.isNotBlank()) {
+                                                existingReminder?.id?.let { remId ->
+                                                    viewModel.fetchCustomSound(remId, remoteSoundUrlInput)
+                                                }
+                                            }
+                                        },
+                                        enabled = soundEnabled && remoteSoundUrlInput.isNotBlank() && soundFetchStatus != SoundFetchState.FETCHING && isEditing && notificationsEnabled,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = when (soundFetchStatus) {
+                                                SoundFetchState.FETCHED -> MaterialTheme.colorScheme.tertiary
+                                                SoundFetchState.ERROR -> MaterialTheme.colorScheme.errorContainer
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                    ) {
+                                        Text(
+                                            when (soundFetchStatus) {
+                                                SoundFetchState.FETCHING -> "Fetching..."
+                                                SoundFetchState.FETCHED -> "Re-fetch"
+                                                SoundFetchState.ERROR -> "Retry Fetch"
+                                                else -> "Download Sound"
+                                            }
+                                        )
+                                    }
+                                    
+                                    when (soundFetchStatus) {
+                                        SoundFetchState.FETCHING -> {
+                                            if (soundDownloadProgress != null) {
+                                                // Determinate progress
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    CircularProgressIndicator(
+                                                        progress = { soundDownloadProgress / 100f },
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                    Text("${soundDownloadProgress}%", style = MaterialTheme.typography.bodySmall)
+                                                }
+                                            } else {
+                                                // Indeterminate progress
+                                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                            }
+                                        }
+                                        SoundFetchState.FETCHED -> Text("✅ Sound Ready", color = MaterialTheme.colorScheme.tertiary)
+                                        SoundFetchState.ERROR -> Text("⚠️ Download Failed", color = MaterialTheme.colorScheme.error)
+                                        SoundFetchState.IDLE -> if (remoteSoundUrlInput.isNotBlank() && soundEnabled && isEditing) 
+                                                                   Text("Pending download") 
+                                                               else Text("")
+                                    }
+                                }
+                                
+                                if (soundFetchStatus == SoundFetchState.FETCHED && actualLocalSoundUri != null) {
+                                    Text(
+                                        "Sound file: ${actualLocalSoundUri.takeLast(20)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Divider()
+                        // Vibration Settings
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("Enable Vibration", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.weight(1f))
+                            Switch(checked = vibrateEnabled, onCheckedChange = { vibrateEnabled = it }, enabled = notificationsEnabled)
+                        }
+                        Divider()
+                        // Advanced Notification Settings
+                        AdvanceNotificationSelector(
+                            selectedMinutes = selectedAdvanceMinutes,
+                            onMinutesSelected = { selectedAdvanceMinutes = it }
+                        )
+                        Divider()
+                        // Repeat notification settings
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Repeat Notification", style = MaterialTheme.typography.bodyMedium)
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = repeatCount,
+                                    onValueChange = { 
+                                        if (it.isEmpty() || it.toIntOrNull() != null) {
+                                            repeatCount = it
+                                        }
+                                    },
+                                    label = { Text("Times") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    enabled = notificationsEnabled
+                                )
+                                
+                                OutlinedTextField(
+                                    value = repeatInterval,
+                                    onValueChange = { 
+                                        if (it.isEmpty() || it.toIntOrNull() != null) {
+                                            repeatInterval = it
+                                        }
+                                    },
+                                    label = { Text("Interval (min)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    enabled = notificationsEnabled
+                                )
+                            }
+                            
+                            Text(
+                                text = "Reminder will repeat ${repeatCount.toIntOrNull() ?: 0} times, every ${repeatInterval.toIntOrNull() ?: 5} minutes if not dismissed",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Delete button (for editing only)
+            if (isEditing) {
+                Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        if (soundEnabled && remoteSoundUrlInput.isNotBlank()) {
-                            // Use existingReminder.id for the fetch operation.
-                            // If it's a new reminder, existingReminder.id will be null,
-                            // and fetchCustomSound won't be called, which is correct
-                            // as it needs an ID to update the reminder in the repository.
-                            existingReminder?.id?.let { remId ->
-                                viewModel.fetchCustomSound(remId, remoteSoundUrlInput)
-                            }
+                        existingReminder?.let {
+                            viewModel.deleteReminder(it)
+                            navController.popBackStack()
                         }
                     },
-                    enabled = soundEnabled && remoteSoundUrlInput.isNotBlank() && soundFetchStatus != SoundFetchState.FETCHING && isEditing // Fetch button enabled only for existing reminders
-                ) {
-                    Text(
-                        when (soundFetchStatus) {
-                            SoundFetchState.FETCHING -> "Fetching..."
-                            SoundFetchState.FETCHED -> "Re-fetch" // Or "Update Sound"
-                            SoundFetchState.ERROR -> "Retry Fetch"
-                            else -> "Use sound from Internet" // Changed from "Fetch Sound"
-                        }
-                    )
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Delete Reminder")
                 }
-                when (soundFetchStatus) {
-                    SoundFetchState.FETCHING -> {
-                        if (soundDownloadProgress != null) {
-                            // Determinate progress
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(
-                                    progress = { soundDownloadProgress / 100f },
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text("${soundDownloadProgress}%", style = MaterialTheme.typography.bodySmall)
-                            }
-                        } else {
-                            // Indeterminate progress (e.g., if contentLength was not available)
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    }
-                    SoundFetchState.FETCHED -> Text("✅ Fetched", color = MaterialTheme.colorScheme.primary)
-                    SoundFetchState.ERROR -> Text("⚠️ Error", color = MaterialTheme.colorScheme.error)
-                    SoundFetchState.IDLE -> if (remoteSoundUrlInput.isNotBlank() && soundEnabled && isEditing) Text("Pending fetch") else Text("") // Show pending only if editing
-                }
-            }
-            if (soundFetchStatus == SoundFetchState.FETCHED && actualLocalSoundUri != null) {
-                Text("Using: ${actualLocalSoundUri.takeLast(20)}", style = MaterialTheme.typography.bodySmall)
-            }
-
-
-            // Vibrate Enabled Switch
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Enable Vibration")
-                Spacer(Modifier.weight(1f))
-                Switch(checked = vibrateEnabled, onCheckedChange = { vibrateEnabled = it })
-            }
-
-            // Advance Notification Dropdown
-            AdvanceNotificationSelector(
-                selectedMinutes = selectedAdvanceMinutes,
-                onMinutesSelected = { selectedAdvanceMinutes = it }
-            )
-
-            // Repeat Count
-            OutlinedTextField(
-                value = repeatCount,
-                onValueChange = { repeatCount = it.filter { char -> char.isDigit() } },
-                label = { Text("Repeat Count (if not viewed)") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
-            )
-
-            // Repeat Interval
-            OutlinedTextField(
-                value = repeatInterval,
-                onValueChange = { repeatInterval = it.filter { char -> char.isDigit() } },
-                label = { Text("Repeat Interval (minutes)") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                enabled = (repeatCount.toIntOrNull() ?: 0) > 0
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PrioritySelector(
-    selectedPriority: com.example.reminderapp.data.model.Priority,
-    onPrioritySelected: (com.example.reminderapp.data.model.Priority) -> Unit
-) {
-    val priorities = com.example.reminderapp.data.model.Priority.entries // Changed from .values() to .entries
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = selectedPriority.name,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Priority") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            priorities.forEach { itemPriority -> // Renamed loop variable for clarity
-                DropdownMenuItem(
-                    text = { Text(itemPriority.name) }, // Use the renamed loop variable
-                    onClick = {
-                        onPrioritySelected(itemPriority) // Use the renamed loop variable
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AdvanceNotificationSelector(
-    selectedMinutes: Int,
-    onMinutesSelected: (Int) -> Unit
-) {
-    val advanceOptions = listOf(0, 5, 10, 15, 30, 60) // In minutes
-    val optionsText = advanceOptions.map {
-        when (it) {
-            0 -> "At time of event"
-            else -> "$it minutes before"
-        }
-    }
-    var expanded by remember { mutableStateOf(false) }
-    val currentText = when (selectedMinutes) {
-        0 -> "At time of event"
-        else -> "$selectedMinutes minutes before"
-    }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = currentText,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Notify Me") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            advanceOptions.forEachIndexed { index, minutes ->
-                DropdownMenuItem(
-                    text = { Text(optionsText[index]) },
-                    onClick = {
-                        onMinutesSelected(minutes)
-                        expanded = false
-                    }
-                )
             }
         }
     }

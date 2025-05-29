@@ -13,3 +13,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Additional recommended patterns
+*.log
+*.apk
+*.ap_
+.env
+*.keystore
+.vscode/
